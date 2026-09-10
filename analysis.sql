@@ -332,3 +332,193 @@ LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
+
+
+-- ============================================
+-- Stage 3: Time-Based Order Analysis
+-- ============================================
+
+-- Question 17
+-- How many orders were placed in each month?
+-- Return:
+-- year_month
+-- order_count
+--
+-- Format year_month as YYYY-MM.
+SELECT
+    STRFTIME('%Y-%m', order_date) AS year_month,
+    COUNT(order_id) AS order_count
+FROM orders
+GROUP BY year_month;
+
+-- Question 18
+-- What is the total revenue generated in each month
+-- from non-cancelled orders?
+-- Return:
+-- year_month
+-- total_revenue
+--
+-- Revenue = quantity * unit_price.
+WITH order_totals AS (
+    SELECT
+        orders.order_id,
+        orders.order_date,
+        orders.status,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    GROUP BY
+        orders.order_id,
+        orders.order_date,
+        orders.status
+)
+
+SELECT
+    STRFTIME('%Y-%m', order_date) AS year_month,
+    SUM(order_total) AS total_revenue
+FROM order_totals
+WHERE status <> 'Cancelled'
+GROUP BY year_month;
+
+
+-- Question 19
+-- Which month had the highest total revenue from non-cancelled orders?
+-- Return:
+-- year_month
+-- total_revenue
+--
+-- Return only the single highest-revenue month.
+WITH order_totals AS (
+    SELECT
+        orders.order_id,
+        orders.order_date,
+        orders.status,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    GROUP BY
+        orders.order_id,
+        orders.order_date,
+        orders.status
+)
+
+SELECT
+    STRFTIME('%Y-%m', order_date) AS year_month,
+    COALESCE(SUM(order_total), 0) AS total_revenue
+FROM order_totals
+WHERE status <> 'Cancelled'
+GROUP BY STRFTIME('%Y-%m', order_date)
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+-- Question 20
+-- For each customer, what was the date of their first order?
+-- Return:
+-- customer_id
+-- customer name
+-- first_order_date
+--
+-- Include customers who have never placed an order.
+SELECT
+    customers.customer_id,
+    customers.name,
+    COALESCE(MIN(orders.order_date), 'No orders') AS first_order_date
+FROM customers
+LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+GROUP BY
+    customers.customer_id,
+    customers.name;
+
+-- Question 21
+-- For each customer, what was the date of their most recent order,
+-- and how many days had passed between their signup date
+-- and their most recent order?
+--
+-- Return:
+-- customer_id
+-- customer name
+-- signup_date
+-- most_recent_order_date
+-- days_to_most_recent_order
+--
+-- Include customers who have never placed an order.
+SELECT
+    customers.customer_id,
+    customers.name,
+    customers.signup_date,
+    MAX(orders.order_date) AS most_recent_order_date,
+    JULIANDAY(MAX(orders.order_date))
+    - JULIANDAY(customers.signup_date) AS days_to_most_recent_order
+FROM customers
+LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+GROUP BY
+    customers.customer_id,
+    customers.name,
+    customers.signup_date;
+
+
+-- Question 22
+-- How many new customers signed up in each month?
+-- Return:
+-- year_month
+-- new_customers
+--
+-- Format year_month as YYYY-MM.
+SELECT
+    STRFTIME('%Y-%m', signup_date) AS year_month,
+    COUNT(customer_id) AS new_customers
+FROM customers
+GROUP BY year_month;
+
+
+-- Question 23
+-- For each month, calculate:
+-- year_month
+-- total_revenue
+-- total_orders
+-- average_order_value
+--
+-- Include only non-cancelled orders.
+WITH order_totals AS (
+    SELECT
+        orders.order_id,
+        orders.order_date,
+        orders.status,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    GROUP BY
+        orders.order_id,
+        orders.order_date,
+        orders.status
+)
+
+SELECT
+    STRFTIME('%Y-%m', order_date) AS year_month,
+    SUM(order_total) AS total_revenue,
+    COUNT(order_id) AS total_orders,
+    AVG(order_total) AS average_order_value
+FROM order_totals
+WHERE status <> 'Cancelled'
+GROUP BY year_month;
+
+-- Question 24
+-- For each customer, calculate:
+-- customer_id
+-- customer name
+-- first_order_date
+-- most_recent_order_date
+-- total_orders
+--
+-- Include customers who have never placed an order.
+SELECT
+    customers.customer_id,
+    customers.name,
+    MIN(orders.order_date) AS first_order_date,
+    MAX(orders.order_date) AS most_recent_order_date,
+    COUNT(orders.order_id) AS total_orders
+FROM customers
+LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+GROUP BY
+    customers.customer_id,
+    customers.name;
