@@ -783,3 +783,397 @@ SELECT
 FROM categories
 INNER JOIN products_ranked ON categories.category_id = products_ranked.category_id
 WHERE product_ranking = 1;
+
+
+-- ============================================
+-- Stage 5: Advanced Customer & Business Analysis
+-- ============================================
+
+-- Question 33
+-- Rank all customers by their total spending on
+-- non-cancelled orders.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- total_spent
+-- spending_rank
+--
+-- Customers with the same total spending should receive
+-- the same rank.
+WITH order_totals AS (
+    SELECT
+        orders.order_id,
+        orders.customer_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.order_id,
+        orders.customer_id
+),
+
+customer_spending AS (
+    SELECT
+        customers.customer_id,
+        customers.name,
+        COALESCE(SUM(order_totals.order_total), 0) AS total_spent
+    FROM customers
+    LEFT OUTER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+    GROUP BY
+        customers.customer_id,
+        customers.name
+)
+
+SELECT
+    customer_id,
+    name,
+    total_spent,
+    DENSE_RANK() OVER (
+        ORDER BY total_spent DESC
+    ) AS spending_rank
+FROM customer_spending;
+
+
+-- Question 34
+-- For each customer, return their:
+-- customer_id
+-- customer name
+-- most_recent_order_date
+-- most_recent_order_amount
+--
+-- Include customers who have never placed an order.
+--
+-- Only non-cancelled orders should be considered when
+-- determining the most recent order.
+WITH order_recency_ranked AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date,
+        ROW_NUMBER() OVER(
+            PARTITION BY orders.customer_id
+            ORDER BY order_date DESC, orders.order_id DESC
+        ) AS recency_rank,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date
+)
+
+SELECT
+    customers.customer_id,
+    customers.name,
+    order_recency_ranked.order_date AS most_recent_order_date,
+    order_recency_ranked.order_total AS most_recent_order_amount
+FROM customers
+LEFT OUTER JOIN order_recency_ranked ON customers.customer_id = order_recency_ranked.customer_id
+    AND order_recency_ranked.recency_rank = 1;
+
+-- Question 35
+-- For each customer who has placed at least two orders,
+-- show their:
+-- customer_id
+-- customer name
+-- order_id
+-- order_date
+-- order_total
+-- previous_order_total
+--
+-- previous_order_total should represent the amount of the
+-- customer's immediately previous order.
+--
+-- Only non-cancelled orders should be considered.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(orders.order_id) OVER(
+            PARTITION BY orders.customer_id
+        ) AS customer_order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date
+)
+
+SELECT
+    customers.customer_id,
+    customers.name,
+    order_totals.order_id,
+    order_totals.order_date,
+    order_totals.order_total,
+    LAG(order_totals.order_total) OVER (
+        PARTITION BY order_totals.customer_id
+        ORDER BY order_totals.order_id
+    ) AS previous_order_total
+FROM customers
+INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+WHERE order_totals.customer_order_count > 1;
+
+
+-- Question 36
+-- For each customer who has placed at least two non-cancelled orders,
+-- calculate the difference between each order and the customer's
+-- previous order.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- order_id
+-- order_date
+-- order_total
+-- previous_order_total
+-- order_difference
+--
+-- A positive order_difference means the current order was larger
+-- than the previous order.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(*) OVER (
+            PARTITION BY orders.customer_id
+        ) AS customer_order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id,
+        orders.order_date
+),
+
+order_history AS (
+    SELECT
+        customer_id,
+        order_id,
+        order_date,
+        order_total,
+        customer_order_count,
+        LAG(order_total) OVER(
+            PARTITION BY customer_id
+            ORDER BY order_id
+        ) AS previous_order_total
+    FROM order_totals
+)
+
+SELECT
+    order_history.customer_id,
+    customers.name,
+    order_history.order_id,
+    order_history.order_date,
+    order_history.order_total,
+    order_history.previous_order_total,
+    order_history.order_total - order_history.previous_order_total AS order_difference
+FROM order_history
+INNER JOIN customers ON order_history.customer_id = customers.customer_id
+WHERE order_history.customer_order_count >= 2;
+
+
+-- Question 37
+-- What percentage of non-cancelled revenue was generated by
+-- customers who placed more than one non-cancelled order?
+--
+-- Return:
+-- repeat_customer_revenue
+-- total_revenue
+-- repeat_customer_revenue_percentage
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(*) OVER(
+            PARTITION BY orders.customer_id
+        ) AS order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+revenue_amounts AS (
+    SELECT
+        SUM(CASE WHEN order_count > 1 THEN order_total ELSE 0 END) AS repeat_customer_revenue,
+        SUM(order_total) AS total_revenue
+    FROM order_totals
+)
+
+SELECT
+    repeat_customer_revenue,
+    total_revenue,
+    repeat_customer_revenue * 100.0 / total_revenue AS repeat_customer_revenue_percentage
+FROM revenue_amounts;
+
+
+-- Question 38
+-- For each customer, calculate their percentage of total
+-- non-cancelled revenue.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- total_spent
+-- revenue_percentage
+--
+-- Order from highest-spending customer to lowest-spending customer.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+customer_totals AS (
+    SELECT
+        order_totals.customer_id,
+        customers.name,
+        SUM(order_totals.order_total) AS total_spent
+    FROM order_totals
+    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+    GROUP BY
+        order_totals.customer_id,
+        customers.name
+)
+
+SELECT
+    customer_id,
+    name,
+    total_spent,
+    total_spent * 100.0 / SUM(total_spent) OVER() AS revenue_percentage
+FROM customer_totals
+ORDER BY total_spent DESC;
+
+
+-- Question 39
+-- Identify customers whose most recent non-cancelled order
+-- was larger than their previous non-cancelled order.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- previous_order_amount
+-- most_recent_order_amount
+-- increase_amount
+--
+-- Only include customers with at least two non-cancelled orders.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(*) OVER(
+            PARTITION BY orders.customer_id
+        ) AS order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+order_summary AS (
+    SELECT
+        order_totals.customer_id,
+        customers.name,
+        order_totals.order_id,
+        order_totals.order_total,
+        order_totals.order_count,
+        ROW_NUMBER() OVER(
+            PARTITION BY order_totals.customer_id
+            ORDER BY order_totals.order_id DESC
+        ) AS recency_rank,
+        LAG(order_total) OVER(
+            PARTITION BY order_totals.customer_id
+            ORDER BY order_totals.order_id
+        ) AS previous_order_amount
+    FROM order_totals
+    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+)
+
+SELECT
+    customer_id,
+    name,
+    previous_order_amount,
+    order_total,
+    order_total - previous_order_amount AS increase_amount
+FROM order_summary
+WHERE recency_rank = 1 AND order_total - previous_order_amount > 0;
+
+
+-- Question 40
+-- Identify the top 3 customers by total non-cancelled spending.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- total_spent
+-- spending_rank
+--
+-- If multiple customers tie for third place, include all
+-- customers tied for that rank.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+customer_total_spending AS (
+    SELECT
+        order_totals.customer_id,
+        customers.name,
+        SUM(order_totals.order_total) AS total_spent
+    FROM order_totals
+    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+    GROUP BY
+        order_totals.customer_id,
+        customers.name
+),
+
+customers_ranked AS (
+    SELECT
+        customer_id,
+        name,
+        total_spent,
+        DENSE_RANK() OVER(
+            ORDER BY total_spent DESC
+        ) AS spending_rank
+    FROM customer_total_spending
+)
+
+SELECT
+    customer_id,
+    name,
+    total_spent,
+    spending_rank
+FROM customers_ranked
+WHERE spending_rank <= 3;
