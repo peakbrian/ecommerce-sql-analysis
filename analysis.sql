@@ -1177,3 +1177,409 @@ SELECT
     spending_rank
 FROM customers_ranked
 WHERE spending_rank <= 3;
+
+-- ============================================
+-- Stage 6: Independent Business Analysis
+-- ============================================
+
+-- Question 41
+-- Management wants to understand customer purchasing behavior.
+--
+-- Divide customers into two groups:
+--   1. One-time customers: exactly one non-cancelled order
+--   2. Repeat customers: more than one non-cancelled order
+--
+-- For each group, calculate:
+-- customer_type
+-- customer_count
+-- total_revenue
+-- average_revenue_per_customer
+--
+-- Exclude customers who have never placed a non-cancelled order.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(*) OVER(
+            PARTITION BY orders.customer_id
+        ) AS order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+customer_totals AS (
+    SELECT
+        customer_id,
+        order_count,
+        SUM(order_total) AS customer_total_revenue
+    FROM order_totals
+    GROUP BY
+        customer_id,
+        order_count
+),
+
+one_time_customers AS (
+    SELECT
+        'One-time' AS customer_type,
+        COUNT(*) AS customer_count,
+        SUM(customer_total_revenue) AS total_revenue,
+        AVG(customer_total_revenue) AS average_revenue_per_customer
+    FROM customer_totals
+    WHERE order_count = 1
+    GROUP BY customer_type
+),
+
+repeat_customers AS (
+    SELECT
+        'Repeat' AS customer_type,
+        COUNT(*) AS customer_count,
+        SUM(customer_total_revenue) AS total_revenue,
+        AVG(customer_total_revenue) AS average_revenue_per_customer
+    FROM customer_totals
+    WHERE order_count > 1
+    GROUP BY customer_type
+)
+
+SELECT *
+FROM one_time_customers
+UNION
+SELECT *
+FROM repeat_customers;
+
+-- WITHOUT UNION
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total,
+        COUNT(*) OVER(
+            PARTITION BY orders.customer_id
+        ) AS order_count
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+customer_summary AS (
+    SELECT
+        customer_id,
+        CASE
+            WHEN order_count > 1 THEN 'Repeat' ELSE 'One-Time'
+        END AS customer_type,
+        SUM(order_total) AS customer_revenue
+    FROM order_totals
+    GROUP BY
+        customer_id,
+        customer_type
+)
+
+SELECT
+    customer_type,
+    COUNT(*)  AS customer_count,
+    SUM(customer_revenue) AS total_revenue,
+    AVG(customer_revenue) AS average_revenue_per_customer
+FROM customer_summary
+GROUP BY customer_type;
+
+
+-- Question 42
+-- Management wants to know which product categories are
+-- especially dependent on repeat customers.
+--
+-- For each category, calculate:
+-- category_name
+-- total_revenue
+-- repeat_customer_revenue
+-- repeat_customer_revenue_percentage
+--
+-- A repeat customer is a customer with more than one
+-- non-cancelled order.
+--Find repeating customers and figure out how much of each product they bought
+
+WITH product_sales AS (
+    SELECT
+        order_items.product_id,
+        categories.category_id,
+        categories.category_name,
+        order_items.order_id,
+        orders.customer_id,
+        order_items.quantity * order_items.unit_price AS product_total
+    FROM order_items
+    INNER JOIN orders On order_items.order_id = orders.order_id
+    INNER JOIN products ON order_items.product_id = products.product_id
+    INNER JOIN categories ON products.category_id = categories.category_id
+    WHERE orders.status <> 'Cancelled'
+),
+
+customer_order_counts AS (
+    SELECT
+        customer_id,
+        COUNT(*) AS order_count
+    FROM orders
+    WHERE status <> 'Cancelled'
+    GROUP BY customer_id
+),
+
+category_summary AS (
+    SELECT
+        product_sales.category_id,
+        product_sales.category_name,
+        SUM(product_sales.product_total) AS total_revenue,
+        SUM(CASE
+                WHEN customer_order_counts.order_count > 1 THEN product_sales.product_total ELSE 0
+            END) AS repeat_customer_revenue
+    FROM product_sales
+    INNER JOIN customer_order_counts ON product_sales.customer_id = customer_order_counts.customer_id
+    GROUP BY
+        product_sales.category_id,
+        product_sales.category_name
+)
+
+SELECT
+    category_name,
+    total_revenue,
+    repeat_customer_revenue,
+    repeat_customer_revenue * 100.0 / total_revenue AS repeat_customer_revenue_percentage
+FROM category_summary;
+
+
+-- Question 43
+-- Identify customers whose total non-cancelled spending
+-- is above the average spending of customers who have
+-- at least one non-cancelled order.
+--
+-- Return:
+-- customer_id
+-- customer name
+-- total_spent
+--
+-- Order from highest spender to lowest spender.
+WITH order_totals AS (
+    SELECT
+        orders.customer_id,
+        orders.order_id,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
+    FROM orders
+    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        orders.customer_id,
+        orders.order_id
+),
+
+customer_summary AS (
+    SELECT
+        customers.customer_id,
+        customers.name,
+        SUM(order_totals.order_total) AS total_spent
+    FROM customers
+    INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+    GROUP BY
+        customers.customer_id,
+        customers.name,
+        order_totals.customer_order_count
+)
+
+SELECT
+    customer_id,
+    name,
+    total_spent
+FROM customer_summary
+WHERE total_spent > (
+    SELECT AVG(total_spent)
+    FROM customer_summary
+)
+ORDER BY total_spent DESC;
+
+
+-- Question 44
+-- Management wants to identify products that have generated
+-- revenue despite being purchased by relatively few customers.
+--
+-- For each product, calculate:
+-- product_id
+-- product_name
+-- unique_customer_count
+-- total_revenue
+--
+-- Only include non-cancelled orders.
+--
+-- Return products purchased by 2 or fewer distinct customers,
+-- ordered by total_revenue from highest to lowest.
+WITH customer_product_sales AS (
+    SELECT
+        order_items.product_id,
+        products.product_name,
+        orders.customer_id,
+        SUM(order_items.quantity * order_items.unit_price) AS customer_product_revenue
+    FROM order_items
+    INNER JOIN orders On order_items.order_id = orders.order_id
+    INNER JOIN products ON order_items.product_id = products.product_id
+    INNER JOIN categories ON products.category_id = categories.category_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        order_items.product_id,
+        products.product_name,
+        orders.customer_id
+)
+
+SELECT
+    product_id,
+    product_name,
+    COUNT(DISTINCT customer_id) AS unique_customer_count,
+    SUM(customer_product_revenue) AS total_revenue
+FROM customer_product_sales
+GROUP BY
+    product_id,
+    product_name
+HAVING unique_customer_count <= 2
+ORDER BY total_revenue DESC;
+
+
+-- Question 45
+-- Identify the month in which each category generated its
+-- highest revenue.
+--
+-- Return:
+-- category_name
+-- year_month
+-- monthly_revenue
+--
+-- If a category has multiple months tied for its highest
+-- revenue, return all tied months.
+--
+-- Only include non-cancelled orders.
+WITH monthly_product_revenues AS (
+    SELECT
+        order_items.product_id,
+        products.category_id,
+        strftime('%Y-%m', orders.order_date) AS year_month,
+        SUM(order_items.quantity * order_items.unit_price) AS monthly_product_revenue
+    FROM products
+    INNER JOIN order_items ON products.product_id = order_items.product_id
+    INNER JOIN orders ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+    GROUP BY
+        order_items.product_id,
+        products.category_id,
+        strftime('%Y-%m', orders.order_date)
+),
+
+monthly_category_revenues_ranked AS (
+    SELECT
+        monthly_product_revenues.category_id,
+        categories.category_name,
+        monthly_product_revenues.year_month,
+        SUM(monthly_product_revenues.monthly_product_revenue) AS monthly_revenue,
+        DENSE_RANK() OVER(
+            PARTITION BY monthly_product_revenues.category_id
+            ORDER BY SUM(monthly_product_revenues.monthly_product_revenue) DESC
+        ) AS month_ranking
+    FROM monthly_product_revenues
+    INNER JOIN categories ON monthly_product_revenues.category_id = categories.category_id
+    GROUP BY
+        monthly_product_revenues.category_id,
+        categories.category_name,
+        monthly_product_revenues.year_month
+)
+
+SELECT
+    category_name,
+    year_month,
+    monthly_revenue
+FROM monthly_category_revenues_ranked
+WHERE month_ranking = 1;
+
+-- Question 46
+-- Final open-ended analysis:
+--
+-- Management wants to identify their most valuable customers.
+--
+-- Define "valuable" using at least TWO measurable characteristics
+-- from the database.
+--
+-- Return a customer-level result that supports your definition.
+--
+-- Your analysis should:
+-- 1. Clearly define what makes a customer "valuable".
+-- 2. Use SQL to calculate the relevant metrics.
+-- 3. Explain why those metrics support your definition.
+--
+-- Do not simply rank customers by total spending alone.
+
+-- 1. I am defining a "valuable" customer based off of the two metrics: total spending (only non-cancelled orders) 
+-- and number of non-cancelled orders. As such, a valuable customer is one who has spent a lot of money 
+-- and places a lot of orders.
+-- 2. 
+WITH order_totals AS (
+    SELECT
+        orders.order_id,
+        customers.customer_id,
+        customers.name,
+        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS order_total,
+        COUNT(orders.order_id) OVER (
+            PARTITION BY customers.customer_id
+        ) AS customer_order_count
+    FROM customers
+    LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+        AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN order_items ON orders.order_id = order_items.order_id
+    GROUP BY
+        orders.order_id,
+        customers.customer_id
+),
+
+customer_spending AS (
+    SELECT
+        customers.customer_id,
+        customers.name,
+        SUM(order_totals.order_total) AS total_spending,
+        order_totals.customer_order_count
+    FROM customers
+    INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+    GROUP BY
+        customers.customer_id,
+        customers.name,
+        order_totals.customer_order_count
+),
+
+customer_ranking AS (
+    SELECT
+        customer_id,
+        name,
+        total_spending,
+        DENSE_RANK() OVER (
+            ORDER BY total_spending DESC
+        ) AS spending_rank,
+        customer_order_count,
+        DENSE_RANK() OVER (
+            ORDER BY customer_order_count DESC
+        ) AS order_rank
+    FROM customer_spending
+)
+
+SELECT
+    spending_rank + (0.5 * order_rank) AS value_score,
+    customer_id,
+    name,
+    total_spending,
+    spending_rank,
+    customer_order_count,
+    order_rank
+FROM customer_ranking
+ORDER BY value_score;
+
+-- 3. By finding total_spending and customer_order_count, we can determine the highest and most-frequent customers. 
+-- Customer ranking is based on a composite score combining spending rank and order rank. Lower value score = more valuable.
+-- The value score is an analytical ranking measure rather than an objective measure of customer value.
+-- The most valuable customers, as such, are those who spend a lot of money and place a lot of orders.
+-- Total spending is weighted more heavily than number of orders placed, meaning high spenders are more
+-- valuable than customers who place a high volume of low-value orders.
