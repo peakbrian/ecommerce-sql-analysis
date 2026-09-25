@@ -9,22 +9,22 @@
 
 -- Question 1
 -- How many customers are in the database?
-SELECT COUNT(customer_id)
+SELECT COUNT(*)
 FROM customers;
 
 -- Question 2
 -- How many orders are in the database?
-SELECT COUNT(order_id)
+SELECT COUNT(*)
 FROM orders;
 
 -- Question 3
 -- How many products are in the database?
-SELECT COUNT(product_id)
+SELECT COUNT(*)
 FROM products;
 
 -- Question 4
 -- How many product categories are in the database?
-SELECT COUNT(category_id)
+SELECT COUNT(*)
 FROM categories;
 
 -- Question 5
@@ -48,12 +48,6 @@ FROM orders;
 -- Question 7
 -- How many orders are there for each order status?
 SELECT
-    SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled_orders,
-    SUM(CASE WHEN status = 'Shipped' THEN 1 ELSE 0 END) AS shipped_orders,
-    SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_orders
-FROM orders;
-
-SELECT
     status,
     COUNT(order_id) AS order_count
 FROM orders
@@ -65,7 +59,8 @@ GROUP BY status;
 -- Non-cancelled orders have a status other than 'Cancelled'.
 SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue
 FROM order_items
-INNER JOIN orders ON order_items.order_id = orders.order_id
+INNER JOIN orders
+    ON order_items.order_id = orders.order_id
 WHERE orders.status <> 'Cancelled';
 
 
@@ -84,7 +79,8 @@ SELECT
     customers.name,
     COUNT(orders.order_id) AS orders_placed
 FROM customers
-LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+LEFT OUTER JOIN orders
+    ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
@@ -102,7 +98,8 @@ WITH order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -112,9 +109,10 @@ WITH order_totals AS (
 SELECT
     customers.customer_id,
     customers.name,
-    COALESCE(SUM(order_totals.order_total), 0) AS total_spent_viable_orders
+    COALESCE(SUM(order_totals.order_total), 0) AS total_spent
 FROM customers
-LEFT OUTER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+LEFT OUTER JOIN order_totals
+    ON customers.customer_id = order_totals.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
@@ -133,7 +131,8 @@ WITH viable_order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -144,76 +143,19 @@ SELECT
     customers.customer_id,
     customers.name,
     COALESCE(SUM(viable_order_totals.order_total), 0)
-        AS total_spent_viable_orders
+        AS total_spent
 FROM customers
-LEFT OUTER JOIN
-    viable_order_totals
+LEFT OUTER JOIN viable_order_totals
     ON customers.customer_id = viable_order_totals.customer_id
 GROUP BY
     customers.customer_id,
     customers.name
-HAVING total_spent_viable_orders > 500
-ORDER BY total_spent_viable_orders DESC;
+HAVING total_spent > 500
+ORDER BY total_spent DESC;
 
 -- Question 12
 -- What is the average amount spent per customer on non-cancelled orders?
 -- Customers who have never placed an order should be included in the average.
-
--- 1 row per customer
-WITH viable_order_totals AS (
-    SELECT
-        orders.customer_id,
-        orders.order_id,
-        SUM(order_items.quantity * order_items.unit_price) AS order_total
-    FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
-    WHERE orders.status <> 'Cancelled'
-    GROUP BY
-        orders.customer_id,
-        orders.order_id
-)
-
-SELECT
-    customers.customer_id,
-    customers.name,
-    COALESCE(AVG(viable_order_totals.order_total), 0) AS avg_spent_viable_orders
-FROM customers
-LEFT OUTER JOIN
-    viable_order_totals
-    ON customers.customer_id = viable_order_totals.customer_id
-GROUP BY
-    customers.customer_id,
-    customers.name;
-
--- 1 result for entire question
-WITH customer_orders AS (
-    SELECT
-        customers.customer_id,
-        orders.order_id,
-        orders.status
-    FROM customers
-    LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
-),
-
-customer_viable_order_totals AS (
-    SELECT
-        SUM(CASE
-            WHEN
-                customer_orders.status <> 'Cancelled'
-                THEN order_items.quantity * order_items.unit_price
-            ELSE 0
-        END) AS total_spent
-    FROM customer_orders
-    LEFT OUTER JOIN
-        order_items
-        ON customer_orders.order_id = order_items.order_id
-    GROUP BY customer_orders.customer_id
-)
-
-SELECT AVG(total_spent) AS average_amount_spent
-FROM customer_viable_order_totals;
-
--- Revised CTE version for readability
 WITH customer_totals AS (
     SELECT
         customers.customer_id,
@@ -253,10 +195,13 @@ WITH order_totals AS (
         orders.status,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     GROUP BY
         orders.customer_id,
-        orders.order_id
+        orders.order_id,
+        orders.order_date,
+        orders.status
 )
 
 SELECT
@@ -266,7 +211,8 @@ SELECT
     order_totals.status,
     order_totals.order_total
 FROM customers
-INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id;
+INNER JOIN order_totals
+    ON customers.customer_id = order_totals.customer_id;
 
 -- Question 14
 -- What is the average order value for non-cancelled orders?
@@ -276,7 +222,8 @@ WITH viable_order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_value
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY orders.order_id
 )
@@ -300,7 +247,8 @@ WITH customer_order_counts AS (
         customers.name,
         COUNT(orders.order_id) AS order_count
     FROM customers
-    LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+    LEFT OUTER JOIN orders
+        ON customers.customer_id = orders.customer_id
     GROUP BY
         customers.customer_id,
         customers.name
@@ -328,7 +276,8 @@ SELECT
     customers.name,
     MAX(orders.order_date) AS most_recent_order_date
 FROM customers
-LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+LEFT OUTER JOIN orders
+    ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
@@ -366,7 +315,8 @@ WITH order_totals AS (
         orders.status,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     GROUP BY
         orders.order_id,
         orders.order_date,
@@ -395,7 +345,8 @@ WITH order_totals AS (
         orders.status,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     GROUP BY
         orders.order_id,
         orders.order_date,
@@ -404,7 +355,7 @@ WITH order_totals AS (
 
 SELECT
     STRFTIME('%Y-%m', order_date) AS year_month,
-    COALESCE(SUM(order_total), 0) AS total_revenue
+    SUM(order_total) AS total_revenue
 FROM order_totals
 WHERE status <> 'Cancelled'
 GROUP BY STRFTIME('%Y-%m', order_date)
@@ -422,9 +373,10 @@ LIMIT 1;
 SELECT
     customers.customer_id,
     customers.name,
-    COALESCE(MIN(orders.order_date), 'No orders') AS first_order_date
+    MIN(orders.order_date) AS first_order_date
 FROM customers
-LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+LEFT OUTER JOIN orders
+    ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
@@ -450,7 +402,8 @@ SELECT
     JULIANDAY(MAX(orders.order_date))
     - JULIANDAY(customers.signup_date) AS days_to_most_recent_order
 FROM customers
-LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+LEFT OUTER JOIN orders
+    ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name,
@@ -486,7 +439,8 @@ WITH order_totals AS (
         orders.status,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     GROUP BY
         orders.order_id,
         orders.order_date,
@@ -518,7 +472,8 @@ SELECT
     MAX(orders.order_date) AS most_recent_order_date,
     COUNT(orders.order_id) AS total_orders
 FROM customers
-LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
+LEFT OUTER JOIN orders
+    ON customers.customer_id = orders.customer_id
 GROUP BY
     customers.customer_id,
     customers.name;
@@ -539,9 +494,11 @@ SELECT
     categories.category_name,
     COUNT(products.product_id) AS product_count
 FROM categories
-LEFT OUTER JOIN products ON categories.category_id = products.category_id
-GROUP BY categories.category_name;
-
+LEFT OUTER JOIN products
+    ON categories.category_id = products.category_id
+GROUP BY
+    categories.category_id,
+    categories.category_name;
 
 -- Question 26
 -- How many units of each product have been sold
@@ -552,16 +509,23 @@ GROUP BY categories.category_name;
 -- units_sold
 --
 -- Include products with no sales.
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+)
+
 SELECT
     products.product_id,
     products.product_name,
-    COALESCE(SUM(order_items.quantity), 0) AS units_sold
+    COALESCE(SUM(non_cancelled_sales.quantity), 0) AS units_sold
 FROM products
-LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-LEFT OUTER JOIN orders
-    ON
-        order_items.order_id = orders.order_id
-        AND orders.status <> 'Cancelled'
+LEFT JOIN non_cancelled_sales
+    ON products.product_id = non_cancelled_sales.product_id
 GROUP BY
     products.product_id,
     products.product_name;
@@ -576,16 +540,24 @@ GROUP BY
 --
 -- Include products with no sales.
 -- Products with no sales should show 0 revenue.
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+)
+
 SELECT
     products.product_id,
     products.product_name,
-    COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS total_revenue
+    COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS total_revenue
 FROM products
-LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-LEFT OUTER JOIN orders
-    ON
-        order_items.order_id = orders.order_id
-        AND orders.status <> 'Cancelled'
+LEFT OUTER JOIN non_cancelled_sales
+    ON products.product_id = non_cancelled_sales.product_id
 GROUP BY
     products.product_id,
     products.product_name;
@@ -602,16 +574,24 @@ GROUP BY
 -- to lowest revenue.
 --
 -- Only include revenue from non-cancelled orders.
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+)
+
 SELECT
     products.product_id,
     products.product_name,
-    COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS total_revenue
+    COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS total_revenue
 FROM products
-LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-LEFT OUTER JOIN orders
-    ON
-        order_items.order_id = orders.order_id
-        AND orders.status <> 'Cancelled'
+LEFT OUTER JOIN non_cancelled_sales
+    ON products.product_id = non_cancelled_sales.product_id
 GROUP BY
     products.product_id,
     products.product_name
@@ -627,17 +607,25 @@ LIMIT 5;
 -- total_revenue
 --
 -- Return only the single highest-revenue category.
-WITH product_revenues AS (
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+),
+
+product_revenues AS (
     SELECT
         products.product_id,
         products.category_id,
-        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS revenue
+        COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS revenue
     FROM products
-    LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-    LEFT OUTER JOIN orders
-        ON
-            order_items.order_id = orders.order_id
-            AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN non_cancelled_sales
+        ON products.product_id = non_cancelled_sales.product_id
     GROUP BY
         products.product_id,
         products.category_id
@@ -647,7 +635,8 @@ SELECT
     categories.category_name,
     SUM(product_revenues.revenue) AS total_revenue
 FROM categories
-INNER JOIN product_revenues ON categories.category_id = product_revenues.category_id
+INNER JOIN product_revenues
+    ON categories.category_id = product_revenues.category_id
 GROUP BY
     categories.category_id,
     categories.category_name
@@ -662,18 +651,26 @@ LIMIT 1;
 -- product_count
 --
 -- Only include revenue and units from non-cancelled orders.
-WITH product_summary AS (
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+),
+
+product_summary AS (
     SELECT
         products.product_id,
         products.category_id,
-        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS product_revenue,
-        COALESCE(SUM(order_items.quantity), 0) AS units_sold
+        COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS product_revenue,
+        COALESCE(SUM(non_cancelled_sales.quantity), 0) AS units_sold
     FROM products
-    LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-    LEFT OUTER JOIN orders
-        ON
-            order_items.order_id = orders.order_id
-            AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN non_cancelled_sales
+        ON products.product_id = non_cancelled_sales.product_id
     GROUP BY
         products.product_id,
         products.category_id
@@ -685,7 +682,8 @@ SELECT
     SUM(product_summary.units_sold) AS units_sold,
     COUNT(product_summary.product_id) AS product_count
 FROM categories
-INNER JOIN product_summary ON categories.category_id = product_summary.category_id
+INNER JOIN product_summary
+    ON categories.category_id = product_summary.category_id
 GROUP BY
     categories.category_id,
     categories.category_name;
@@ -701,17 +699,25 @@ GROUP BY
 --
 -- The revenue percentages across all categories should add up
 -- to approximately 100%.
-WITH product_revenues AS (
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+),
+
+product_revenues AS (
     SELECT
         products.product_id,
         products.category_id,
-        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS product_revenue
+        COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS product_revenue
     FROM products
-    LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-    LEFT OUTER JOIN orders
-        ON
-            order_items.order_id = orders.order_id
-            AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN non_cancelled_sales
+        ON products.product_id = non_cancelled_sales.product_id
     GROUP BY
         products.product_id,
         products.category_id
@@ -723,7 +729,8 @@ category_revenues AS (
         categories.category_name,
         SUM(product_revenues.product_revenue) AS category_revenue
     FROM categories
-    INNER JOIN product_revenues ON categories.category_id = product_revenues.category_id
+    INNER JOIN product_revenues
+        ON categories.category_id = product_revenues.category_id
     GROUP BY
         categories.category_id,
         categories.category_name
@@ -732,7 +739,8 @@ category_revenues AS (
 SELECT
     category_name,
     category_revenue,
-    category_revenue * 100.0 / SUM(category_revenue) OVER() AS revenue_percentage
+    category_revenue * 100.0
+        / SUM(category_revenue) OVER () AS revenue_percentage
 FROM category_revenues;
 
 -- Question 32
@@ -746,18 +754,26 @@ FROM category_revenues;
 -- within a category, return all tied products.
 --
 -- Only include revenue from non-cancelled orders.
-WITH product_revenues AS (
+WITH non_cancelled_sales AS (
+    SELECT
+        order_items.product_id,
+        order_items.quantity,
+        order_items.quantity * order_items.unit_price AS line_revenue
+    FROM order_items
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    WHERE orders.status <> 'Cancelled'
+),
+
+product_revenues AS (
     SELECT
         products.product_id,
         products.product_name,
         products.category_id,
-        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS product_revenue
+        COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS product_revenue
     FROM products
-    LEFT OUTER JOIN order_items ON products.product_id = order_items.product_id
-    LEFT OUTER JOIN orders
-        ON
-            order_items.order_id = orders.order_id
-            AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN non_cancelled_sales
+        ON products.product_id = non_cancelled_sales.product_id
     GROUP BY
         products.product_id,
         products.category_id
@@ -781,8 +797,9 @@ SELECT
     products_ranked.product_name,
     products_ranked.product_revenue
 FROM categories
-INNER JOIN products_ranked ON categories.category_id = products_ranked.category_id
-WHERE product_ranking = 1;
+INNER JOIN products_ranked
+    ON categories.category_id = products_ranked.category_id
+WHERE products_ranked.product_ranking = 1;
 
 
 -- ============================================
@@ -807,7 +824,8 @@ WITH order_totals AS (
         orders.customer_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.order_id,
@@ -820,7 +838,8 @@ customer_spending AS (
         customers.name,
         COALESCE(SUM(order_totals.order_total), 0) AS total_spent
     FROM customers
-    LEFT OUTER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+    LEFT OUTER JOIN order_totals
+        ON customers.customer_id = order_totals.customer_id
     GROUP BY
         customers.customer_id,
         customers.name
@@ -852,13 +871,14 @@ WITH order_recency_ranked AS (
         orders.customer_id,
         orders.order_id,
         orders.order_date,
-        ROW_NUMBER() OVER(
+        ROW_NUMBER() OVER (
             PARTITION BY orders.customer_id
-            ORDER BY order_date DESC, orders.order_id DESC
+            ORDER BY orders.order_date DESC, orders.order_id DESC
         ) AS recency_rank,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -872,8 +892,10 @@ SELECT
     order_recency_ranked.order_date AS most_recent_order_date,
     order_recency_ranked.order_total AS most_recent_order_amount
 FROM customers
-LEFT OUTER JOIN order_recency_ranked ON customers.customer_id = order_recency_ranked.customer_id
-    AND order_recency_ranked.recency_rank = 1;
+LEFT OUTER JOIN order_recency_ranked
+    ON
+        customers.customer_id = order_recency_ranked.customer_id
+        AND order_recency_ranked.recency_rank = 1;
 
 -- Question 35
 -- For each customer who has placed at least two orders,
@@ -895,11 +917,12 @@ WITH order_totals AS (
         orders.order_id,
         orders.order_date,
         SUM(order_items.quantity * order_items.unit_price) AS order_total,
-        COUNT(orders.order_id) OVER(
+        COUNT(*) OVER (
             PARTITION BY orders.customer_id
         ) AS customer_order_count
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -918,7 +941,8 @@ SELECT
         ORDER BY order_totals.order_id
     ) AS previous_order_total
 FROM customers
-INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+INNER JOIN order_totals
+    ON customers.customer_id = order_totals.customer_id
 WHERE order_totals.customer_order_count > 1;
 
 
@@ -948,7 +972,8 @@ WITH order_totals AS (
             PARTITION BY orders.customer_id
         ) AS customer_order_count
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -963,7 +988,7 @@ order_history AS (
         order_date,
         order_total,
         customer_order_count,
-        LAG(order_total) OVER(
+        LAG(order_total) OVER (
             PARTITION BY customer_id
             ORDER BY order_id
         ) AS previous_order_total
@@ -977,9 +1002,11 @@ SELECT
     order_history.order_date,
     order_history.order_total,
     order_history.previous_order_total,
-    order_history.order_total - order_history.previous_order_total AS order_difference
+    order_history.order_total - order_history.previous_order_total
+        AS order_difference
 FROM order_history
-INNER JOIN customers ON order_history.customer_id = customers.customer_id
+INNER JOIN customers
+    ON order_history.customer_id = customers.customer_id
 WHERE order_history.customer_order_count >= 2;
 
 
@@ -996,11 +1023,12 @@ WITH order_totals AS (
         orders.customer_id,
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total,
-        COUNT(*) OVER(
+        COUNT(*) OVER (
             PARTITION BY orders.customer_id
         ) AS order_count
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -1009,7 +1037,11 @@ WITH order_totals AS (
 
 revenue_amounts AS (
     SELECT
-        SUM(CASE WHEN order_count > 1 THEN order_total ELSE 0 END) AS repeat_customer_revenue,
+        SUM(CASE
+            WHEN order_count > 1
+                THEN order_total
+            ELSE 0
+        END) AS repeat_customer_revenue,
         SUM(order_total) AS total_revenue
     FROM order_totals
 )
@@ -1017,7 +1049,8 @@ revenue_amounts AS (
 SELECT
     repeat_customer_revenue,
     total_revenue,
-    repeat_customer_revenue * 100.0 / total_revenue AS repeat_customer_revenue_percentage
+    repeat_customer_revenue * 100.0
+        / total_revenue AS repeat_customer_revenue_percentage
 FROM revenue_amounts;
 
 
@@ -1038,7 +1071,8 @@ WITH order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -1051,7 +1085,8 @@ customer_totals AS (
         customers.name,
         SUM(order_totals.order_total) AS total_spent
     FROM order_totals
-    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+    INNER JOIN customers
+        ON order_totals.customer_id = customers.customer_id
     GROUP BY
         order_totals.customer_id,
         customers.name
@@ -1061,7 +1096,7 @@ SELECT
     customer_id,
     name,
     total_spent,
-    total_spent * 100.0 / SUM(total_spent) OVER() AS revenue_percentage
+    total_spent * 100.0 / SUM(total_spent) OVER () AS revenue_percentage
 FROM customer_totals
 ORDER BY total_spent DESC;
 
@@ -1082,16 +1117,16 @@ WITH order_totals AS (
     SELECT
         orders.customer_id,
         orders.order_id,
-        SUM(order_items.quantity * order_items.unit_price) AS order_total,
-        COUNT(*) OVER(
-            PARTITION BY orders.customer_id
-        ) AS order_count
+        orders.order_date,
+        SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
-        orders.order_id
+        orders.order_id,
+        orders.order_date
 ),
 
 order_summary AS (
@@ -1100,24 +1135,24 @@ order_summary AS (
         customers.name,
         order_totals.order_id,
         order_totals.order_total,
-        order_totals.order_count,
-        ROW_NUMBER() OVER(
+        ROW_NUMBER() OVER (
             PARTITION BY order_totals.customer_id
-            ORDER BY order_totals.order_id DESC
+            ORDER BY order_totals.order_date DESC, order_totals.order_id DESC
         ) AS recency_rank,
-        LAG(order_total) OVER(
+        LAG(order_totals.order_total) OVER (
             PARTITION BY order_totals.customer_id
-            ORDER BY order_totals.order_id
+            ORDER BY order_totals.order_date ASC, order_totals.order_id ASC
         ) AS previous_order_amount
     FROM order_totals
-    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+    INNER JOIN customers
+        ON order_totals.customer_id = customers.customer_id
 )
 
 SELECT
     customer_id,
     name,
     previous_order_amount,
-    order_total,
+    order_total AS most_recent_order_amount,
     order_total - previous_order_amount AS increase_amount
 FROM order_summary
 WHERE recency_rank = 1 AND order_total - previous_order_amount > 0;
@@ -1140,7 +1175,8 @@ WITH order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -1153,7 +1189,8 @@ customer_total_spending AS (
         customers.name,
         SUM(order_totals.order_total) AS total_spent
     FROM order_totals
-    INNER JOIN customers ON order_totals.customer_id = customers.customer_id
+    INNER JOIN customers
+        ON order_totals.customer_id = customers.customer_id
     GROUP BY
         order_totals.customer_id,
         customers.name
@@ -1164,7 +1201,7 @@ customers_ranked AS (
         customer_id,
         name,
         total_spent,
-        DENSE_RANK() OVER(
+        DENSE_RANK() OVER (
             ORDER BY total_spent DESC
         ) AS spending_rank
     FROM customer_total_spending
@@ -1201,67 +1238,12 @@ WITH order_totals AS (
         orders.customer_id,
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total,
-        COUNT(*) OVER(
+        COUNT(*) OVER (
             PARTITION BY orders.customer_id
         ) AS order_count
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
-    WHERE orders.status <> 'Cancelled'
-    GROUP BY
-        orders.customer_id,
-        orders.order_id
-),
-
-customer_totals AS (
-    SELECT
-        customer_id,
-        order_count,
-        SUM(order_total) AS customer_total_revenue
-    FROM order_totals
-    GROUP BY
-        customer_id,
-        order_count
-),
-
-one_time_customers AS (
-    SELECT
-        'One-time' AS customer_type,
-        COUNT(*) AS customer_count,
-        SUM(customer_total_revenue) AS total_revenue,
-        AVG(customer_total_revenue) AS average_revenue_per_customer
-    FROM customer_totals
-    WHERE order_count = 1
-    GROUP BY customer_type
-),
-
-repeat_customers AS (
-    SELECT
-        'Repeat' AS customer_type,
-        COUNT(*) AS customer_count,
-        SUM(customer_total_revenue) AS total_revenue,
-        AVG(customer_total_revenue) AS average_revenue_per_customer
-    FROM customer_totals
-    WHERE order_count > 1
-    GROUP BY customer_type
-)
-
-SELECT *
-FROM one_time_customers
-UNION
-SELECT *
-FROM repeat_customers;
-
--- WITHOUT UNION
-WITH order_totals AS (
-    SELECT
-        orders.customer_id,
-        orders.order_id,
-        SUM(order_items.quantity * order_items.unit_price) AS order_total,
-        COUNT(*) OVER(
-            PARTITION BY orders.customer_id
-        ) AS order_count
-    FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -1272,7 +1254,9 @@ customer_summary AS (
     SELECT
         customer_id,
         CASE
-            WHEN order_count > 1 THEN 'Repeat' ELSE 'One-Time'
+            WHEN order_count > 1
+                THEN 'Repeat'
+            ELSE 'One-Time'
         END AS customer_type,
         SUM(order_total) AS customer_revenue
     FROM order_totals
@@ -1283,7 +1267,7 @@ customer_summary AS (
 
 SELECT
     customer_type,
-    COUNT(*)  AS customer_count,
+    COUNT(*) AS customer_count,
     SUM(customer_revenue) AS total_revenue,
     AVG(customer_revenue) AS average_revenue_per_customer
 FROM customer_summary
@@ -1302,7 +1286,6 @@ GROUP BY customer_type;
 --
 -- A repeat customer is a customer with more than one
 -- non-cancelled order.
---Find repeating customers and figure out how much of each product they bought
 
 WITH product_sales AS (
     SELECT
@@ -1313,9 +1296,12 @@ WITH product_sales AS (
         orders.customer_id,
         order_items.quantity * order_items.unit_price AS product_total
     FROM order_items
-    INNER JOIN orders On order_items.order_id = orders.order_id
-    INNER JOIN products ON order_items.product_id = products.product_id
-    INNER JOIN categories ON products.category_id = categories.category_id
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    INNER JOIN products
+        ON order_items.product_id = products.product_id
+    INNER JOIN categories
+        ON products.category_id = categories.category_id
     WHERE orders.status <> 'Cancelled'
 ),
 
@@ -1334,10 +1320,13 @@ category_summary AS (
         product_sales.category_name,
         SUM(product_sales.product_total) AS total_revenue,
         SUM(CASE
-                WHEN customer_order_counts.order_count > 1 THEN product_sales.product_total ELSE 0
-            END) AS repeat_customer_revenue
+            WHEN customer_order_counts.order_count > 1
+                THEN product_sales.product_total
+            ELSE 0
+        END) AS repeat_customer_revenue
     FROM product_sales
-    INNER JOIN customer_order_counts ON product_sales.customer_id = customer_order_counts.customer_id
+    INNER JOIN customer_order_counts
+        ON product_sales.customer_id = customer_order_counts.customer_id
     GROUP BY
         product_sales.category_id,
         product_sales.category_name
@@ -1347,7 +1336,8 @@ SELECT
     category_name,
     total_revenue,
     repeat_customer_revenue,
-    repeat_customer_revenue * 100.0 / total_revenue AS repeat_customer_revenue_percentage
+    repeat_customer_revenue * 100.0
+        / total_revenue AS repeat_customer_revenue_percentage
 FROM category_summary;
 
 
@@ -1368,7 +1358,8 @@ WITH order_totals AS (
         orders.order_id,
         SUM(order_items.quantity * order_items.unit_price) AS order_total
     FROM orders
-    INNER JOIN order_items ON orders.order_id = order_items.order_id
+    INNER JOIN order_items
+        ON orders.order_id = order_items.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         orders.customer_id,
@@ -1381,23 +1372,24 @@ customer_summary AS (
         customers.name,
         SUM(order_totals.order_total) AS total_spent
     FROM customers
-    INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+    INNER JOIN order_totals
+        ON customers.customer_id = order_totals.customer_id
     GROUP BY
         customers.customer_id,
-        customers.name,
-        order_totals.customer_order_count
+        customers.name
 )
 
 SELECT
-    customer_id,
-    name,
-    total_spent
-FROM customer_summary
-WHERE total_spent > (
-    SELECT AVG(total_spent)
-    FROM customer_summary
-)
-ORDER BY total_spent DESC;
+    cs.customer_id,
+    cs.name,
+    cs.total_spent
+FROM customer_summary AS cs
+WHERE
+    cs.total_spent > (
+        SELECT AVG(avg_cs.total_spent)
+        FROM customer_summary AS avg_cs
+    )
+ORDER BY cs.total_spent DESC;
 
 
 -- Question 44
@@ -1419,11 +1411,13 @@ WITH customer_product_sales AS (
         order_items.product_id,
         products.product_name,
         orders.customer_id,
-        SUM(order_items.quantity * order_items.unit_price) AS customer_product_revenue
+        SUM(order_items.quantity * order_items.unit_price)
+            AS customer_product_revenue
     FROM order_items
-    INNER JOIN orders On order_items.order_id = orders.order_id
-    INNER JOIN products ON order_items.product_id = products.product_id
-    INNER JOIN categories ON products.category_id = categories.category_id
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
+    INNER JOIN products
+        ON order_items.product_id = products.product_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         order_items.product_id,
@@ -1461,16 +1455,19 @@ WITH monthly_product_revenues AS (
     SELECT
         order_items.product_id,
         products.category_id,
-        strftime('%Y-%m', orders.order_date) AS year_month,
-        SUM(order_items.quantity * order_items.unit_price) AS monthly_product_revenue
+        STRFTIME('%Y-%m', orders.order_date) AS year_month,
+        SUM(order_items.quantity * order_items.unit_price)
+            AS monthly_product_revenue
     FROM products
-    INNER JOIN order_items ON products.product_id = order_items.product_id
-    INNER JOIN orders ON order_items.order_id = orders.order_id
+    INNER JOIN order_items
+        ON products.product_id = order_items.product_id
+    INNER JOIN orders
+        ON order_items.order_id = orders.order_id
     WHERE orders.status <> 'Cancelled'
     GROUP BY
         order_items.product_id,
         products.category_id,
-        strftime('%Y-%m', orders.order_date)
+        STRFTIME('%Y-%m', orders.order_date)
 ),
 
 monthly_category_revenues_ranked AS (
@@ -1478,13 +1475,15 @@ monthly_category_revenues_ranked AS (
         monthly_product_revenues.category_id,
         categories.category_name,
         monthly_product_revenues.year_month,
-        SUM(monthly_product_revenues.monthly_product_revenue) AS monthly_revenue,
-        DENSE_RANK() OVER(
+        SUM(monthly_product_revenues.monthly_product_revenue)
+            AS monthly_revenue,
+        DENSE_RANK() OVER (
             PARTITION BY monthly_product_revenues.category_id
             ORDER BY SUM(monthly_product_revenues.monthly_product_revenue) DESC
         ) AS month_ranking
     FROM monthly_product_revenues
-    INNER JOIN categories ON monthly_product_revenues.category_id = categories.category_id
+    INNER JOIN categories
+        ON monthly_product_revenues.category_id = categories.category_id
     GROUP BY
         monthly_product_revenues.category_id,
         categories.category_name,
@@ -1512,26 +1511,33 @@ WHERE month_ranking = 1;
 -- 1. Clearly define what makes a customer "valuable".
 -- 2. Use SQL to calculate the relevant metrics.
 -- 3. Explain why those metrics support your definition.
---
--- Do not simply rank customers by total spending alone.
 
--- 1. I am defining a "valuable" customer based off of the two metrics: total spending (only non-cancelled orders) 
--- and number of non-cancelled orders. As such, a valuable customer is one who has spent a lot of money 
--- and places a lot of orders.
+
+-- Customer value definition:
+-- A valuable customer is defined using two measurable characteristics:
+-- 1. Total spending from non-cancelled orders.
+-- 2. Number of non-cancelled orders placed.
+--
+-- Customers who spend more and place more orders receive stronger
+-- rankings in the composite value score.
 -- 2. 
 WITH order_totals AS (
     SELECT
         orders.order_id,
         customers.customer_id,
         customers.name,
-        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS order_total,
+        COALESCE(SUM(order_items.quantity * order_items.unit_price), 0)
+            AS order_total,
         COUNT(orders.order_id) OVER (
             PARTITION BY customers.customer_id
         ) AS customer_order_count
     FROM customers
-    LEFT OUTER JOIN orders ON customers.customer_id = orders.customer_id
-        AND orders.status <> 'Cancelled'
-    LEFT OUTER JOIN order_items ON orders.order_id = order_items.order_id
+    LEFT OUTER JOIN orders
+        ON
+            customers.customer_id = orders.customer_id
+            AND orders.status <> 'Cancelled'
+    LEFT OUTER JOIN order_items
+        ON orders.order_id = order_items.order_id
     GROUP BY
         orders.order_id,
         customers.customer_id
@@ -1539,15 +1545,14 @@ WITH order_totals AS (
 
 customer_spending AS (
     SELECT
-        customers.customer_id,
-        customers.name,
-        SUM(order_totals.order_total) AS total_spending,
-        order_totals.customer_order_count
-    FROM customers
-    INNER JOIN order_totals ON customers.customer_id = order_totals.customer_id
+        order_totals.customer_id,
+        order_totals.name,
+        order_totals.customer_order_count,
+        SUM(order_totals.order_total) AS total_spending
+    FROM order_totals
     GROUP BY
-        customers.customer_id,
-        customers.name,
+        order_totals.customer_id,
+        order_totals.name,
         order_totals.customer_order_count
 ),
 
@@ -1556,10 +1561,10 @@ customer_ranking AS (
         customer_id,
         name,
         total_spending,
+        customer_order_count,
         DENSE_RANK() OVER (
             ORDER BY total_spending DESC
         ) AS spending_rank,
-        customer_order_count,
         DENSE_RANK() OVER (
             ORDER BY customer_order_count DESC
         ) AS order_rank
@@ -1567,19 +1572,19 @@ customer_ranking AS (
 )
 
 SELECT
-    spending_rank + (0.5 * order_rank) AS value_score,
     customer_id,
     name,
     total_spending,
     spending_rank,
     customer_order_count,
-    order_rank
+    order_rank,
+    spending_rank + (0.5 * order_rank) AS value_score
 FROM customer_ranking
 ORDER BY value_score;
 
--- 3. By finding total_spending and customer_order_count, we can determine the highest and most-frequent customers. 
--- Customer ranking is based on a composite score combining spending rank and order rank. Lower value score = more valuable.
--- The value score is an analytical ranking measure rather than an objective measure of customer value.
--- The most valuable customers, as such, are those who spend a lot of money and place a lot of orders.
--- Total spending is weighted more heavily than number of orders placed, meaning high spenders are more
--- valuable than customers who place a high volume of low-value orders.
+-- Interpretation:
+-- The composite score combines spending rank and order-frequency rank.
+-- Lower scores indicate stronger performance across both measures.
+-- Total spending receives greater weight than order frequency.
+-- This score is an analytical measure of customer value, not 
+-- an objective definition.
