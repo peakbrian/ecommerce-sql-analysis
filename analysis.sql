@@ -1224,9 +1224,9 @@ customers_ranked AS (
 
 SELECT
     customer_id,
-    name,
-    spending_rank,
-    ROUND(total_spent, 2) AS total_spent
+    name AS customer_name,
+    ROUND(total_spent, 2) AS total_spent,
+    spending_rank
 FROM customers_ranked
 WHERE spending_rank <= 3;
 
@@ -1538,7 +1538,7 @@ WHERE month_ranking = 1;
 --
 -- Customers who spend more and place more orders receive stronger
 -- rankings in the composite value score.
--- 2. 
+
 WITH order_totals AS (
     SELECT
         orders.order_id,
