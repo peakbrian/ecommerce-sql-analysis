@@ -57,7 +57,9 @@ GROUP BY status;
 -- What is the total revenue generated from non-cancelled orders?
 -- Revenue = quantity * unit_price
 -- Non-cancelled orders have a status other than 'Cancelled'.
-SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue
+SELECT
+    ROUND(SUM(order_items.quantity * order_items.unit_price), 2)
+        AS total_revenue
 FROM order_items
 INNER JOIN orders
     ON order_items.order_id = orders.order_id
@@ -109,7 +111,7 @@ WITH order_totals AS (
 SELECT
     customers.customer_id,
     customers.name,
-    COALESCE(SUM(order_totals.order_total), 0) AS total_spent
+    ROUND(COALESCE(SUM(order_totals.order_total), 0), 2) AS total_spent
 FROM customers
 LEFT OUTER JOIN order_totals
     ON customers.customer_id = order_totals.customer_id
@@ -142,7 +144,7 @@ WITH viable_order_totals AS (
 SELECT
     customers.customer_id,
     customers.name,
-    COALESCE(SUM(viable_order_totals.order_total), 0)
+    ROUND(COALESCE(SUM(viable_order_totals.order_total), 0), 2)
         AS total_spent
 FROM customers
 LEFT OUTER JOIN viable_order_totals
@@ -175,7 +177,7 @@ WITH customer_totals AS (
         customers.customer_id
 )
 
-SELECT AVG(total_spent) AS average_amount_spent
+SELECT ROUND(AVG(total_spent), 2) AS average_amount_spent
 FROM customer_totals;
 
 -- Question 13
@@ -209,7 +211,7 @@ SELECT
     customers.name,
     order_totals.order_date,
     order_totals.status,
-    order_totals.order_total
+    ROUND(order_totals.order_total, 2) AS order_total
 FROM customers
 INNER JOIN order_totals
     ON customers.customer_id = order_totals.customer_id;
@@ -228,7 +230,7 @@ WITH viable_order_totals AS (
     GROUP BY orders.order_id
 )
 
-SELECT AVG(viable_order_totals.order_value) AS average_order_value
+SELECT ROUND(AVG(viable_order_totals.order_value), 2) AS average_order_value
 FROM viable_order_totals;
 
 -- Question 15
@@ -325,7 +327,7 @@ WITH order_totals AS (
 
 SELECT
     STRFTIME('%Y-%m', order_date) AS year_month,
-    SUM(order_total) AS total_revenue
+    ROUND(SUM(order_total), 2) AS total_revenue
 FROM order_totals
 WHERE status <> 'Cancelled'
 GROUP BY year_month;
@@ -355,7 +357,7 @@ WITH order_totals AS (
 
 SELECT
     STRFTIME('%Y-%m', order_date) AS year_month,
-    SUM(order_total) AS total_revenue
+    ROUND(SUM(order_total), 2) AS total_revenue
 FROM order_totals
 WHERE status <> 'Cancelled'
 GROUP BY STRFTIME('%Y-%m', order_date)
@@ -449,9 +451,9 @@ WITH order_totals AS (
 
 SELECT
     STRFTIME('%Y-%m', order_date) AS year_month,
-    SUM(order_total) AS total_revenue,
+    ROUND(SUM(order_total), 2) AS total_revenue,
     COUNT(order_id) AS total_orders,
-    AVG(order_total) AS average_order_value
+    ROUND(AVG(order_total), 2) AS average_order_value
 FROM order_totals
 WHERE status <> 'Cancelled'
 GROUP BY year_month;
@@ -554,7 +556,8 @@ WITH non_cancelled_sales AS (
 SELECT
     products.product_id,
     products.product_name,
-    COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS total_revenue
+    ROUND(COALESCE(SUM(non_cancelled_sales.line_revenue), 0), 2)
+        AS total_revenue
 FROM products
 LEFT OUTER JOIN non_cancelled_sales
     ON products.product_id = non_cancelled_sales.product_id
@@ -588,7 +591,8 @@ WITH non_cancelled_sales AS (
 SELECT
     products.product_id,
     products.product_name,
-    COALESCE(SUM(non_cancelled_sales.line_revenue), 0) AS total_revenue
+    ROUND(COALESCE(SUM(non_cancelled_sales.line_revenue), 0), 2)
+        AS total_revenue
 FROM products
 LEFT OUTER JOIN non_cancelled_sales
     ON products.product_id = non_cancelled_sales.product_id
@@ -633,7 +637,7 @@ product_revenues AS (
 
 SELECT
     categories.category_name,
-    SUM(product_revenues.revenue) AS total_revenue
+    ROUND(SUM(product_revenues.revenue), 2) AS total_revenue
 FROM categories
 INNER JOIN product_revenues
     ON categories.category_id = product_revenues.category_id
@@ -678,7 +682,7 @@ product_summary AS (
 
 SELECT
     categories.category_name,
-    SUM(product_summary.product_revenue) AS total_revenue,
+    ROUND(SUM(product_summary.product_revenue), 2) AS total_revenue,
     SUM(product_summary.units_sold) AS units_sold,
     COUNT(product_summary.product_id) AS product_count
 FROM categories
@@ -738,9 +742,12 @@ category_revenues AS (
 
 SELECT
     category_name,
-    category_revenue,
-    category_revenue * 100.0
-        / SUM(category_revenue) OVER () AS revenue_percentage
+    ROUND(category_revenue, 2) AS category_revenue,
+    ROUND(
+        category_revenue * 100.0
+        / SUM(category_revenue) OVER (),
+        2
+    ) AS revenue_percentage
 FROM category_revenues;
 
 -- Question 32
@@ -795,7 +802,7 @@ products_ranked AS (
 SELECT
     categories.category_name,
     products_ranked.product_name,
-    products_ranked.product_revenue
+    ROUND(products_ranked.product_revenue, 2) AS product_revenue
 FROM categories
 INNER JOIN products_ranked
     ON categories.category_id = products_ranked.category_id
@@ -848,7 +855,7 @@ customer_spending AS (
 SELECT
     customer_id,
     name,
-    total_spent,
+    ROUND(total_spent, 2) AS total_spent,
     DENSE_RANK() OVER (
         ORDER BY total_spent DESC
     ) AS spending_rank
@@ -890,7 +897,7 @@ SELECT
     customers.customer_id,
     customers.name,
     order_recency_ranked.order_date AS most_recent_order_date,
-    order_recency_ranked.order_total AS most_recent_order_amount
+    ROUND(order_recency_ranked.order_total, 2) AS most_recent_order_amount
 FROM customers
 LEFT OUTER JOIN order_recency_ranked
     ON
@@ -935,11 +942,11 @@ SELECT
     customers.name,
     order_totals.order_id,
     order_totals.order_date,
-    order_totals.order_total,
-    LAG(order_totals.order_total) OVER (
+    ROUND(order_totals.order_total, 2) AS order_total,
+    ROUND(LAG(order_totals.order_total) OVER (
         PARTITION BY order_totals.customer_id
         ORDER BY order_totals.order_id
-    ) AS previous_order_total
+    ), 2) AS previous_order_total
 FROM customers
 INNER JOIN order_totals
     ON customers.customer_id = order_totals.customer_id
@@ -1000,9 +1007,9 @@ SELECT
     customers.name,
     order_history.order_id,
     order_history.order_date,
-    order_history.order_total,
-    order_history.previous_order_total,
-    order_history.order_total - order_history.previous_order_total
+    ROUND(order_history.order_total, 2) AS order_total,
+    ROUND(order_history.previous_order_total, 2) AS previous_order_total,
+    ROUND(order_history.order_total - order_history.previous_order_total, 2)
         AS order_difference
 FROM order_history
 INNER JOIN customers
@@ -1047,10 +1054,13 @@ revenue_amounts AS (
 )
 
 SELECT
-    repeat_customer_revenue,
-    total_revenue,
-    repeat_customer_revenue * 100.0
-        / total_revenue AS repeat_customer_revenue_percentage
+    ROUND(repeat_customer_revenue, 2) AS repeat_customer_revenue,
+    ROUND(total_revenue, 2) AS total_revenue,
+    ROUND(
+        repeat_customer_revenue * 100.0
+        / total_revenue,
+        2
+    ) AS repeat_customer_revenue_percentage
 FROM revenue_amounts;
 
 
@@ -1093,10 +1103,15 @@ customer_totals AS (
 )
 
 SELECT
-    customer_id,
-    name,
-    total_spent,
-    total_spent * 100.0 / SUM(total_spent) OVER () AS revenue_percentage
+    customer_totals.customer_id,
+    customer_totals.name,
+    ROUND(customer_totals.total_spent, 2) AS total_spent,
+    ROUND(
+        customer_totals.total_spent
+        * 100.0
+        / SUM(customer_totals.total_spent) OVER (),
+        2
+    ) AS revenue_percentage
 FROM customer_totals
 ORDER BY total_spent DESC;
 
@@ -1151,9 +1166,9 @@ order_summary AS (
 SELECT
     customer_id,
     name,
-    previous_order_amount,
-    order_total AS most_recent_order_amount,
-    order_total - previous_order_amount AS increase_amount
+    ROUND(previous_order_amount, 2) AS previous_order_amount,
+    ROUND(order_total, 2) AS most_recent_order_amount,
+    ROUND(order_total - previous_order_amount, 2) AS increase_amount
 FROM order_summary
 WHERE recency_rank = 1 AND order_total - previous_order_amount > 0;
 
@@ -1210,8 +1225,8 @@ customers_ranked AS (
 SELECT
     customer_id,
     name,
-    total_spent,
-    spending_rank
+    spending_rank,
+    ROUND(total_spent, 2) AS total_spent
 FROM customers_ranked
 WHERE spending_rank <= 3;
 
@@ -1268,8 +1283,8 @@ customer_summary AS (
 SELECT
     customer_type,
     COUNT(*) AS customer_count,
-    SUM(customer_revenue) AS total_revenue,
-    AVG(customer_revenue) AS average_revenue_per_customer
+    ROUND(SUM(customer_revenue), 2) AS total_revenue,
+    ROUND(AVG(customer_revenue), 2) AS average_revenue_per_customer
 FROM customer_summary
 GROUP BY customer_type;
 
@@ -1334,10 +1349,13 @@ category_summary AS (
 
 SELECT
     category_name,
-    total_revenue,
-    repeat_customer_revenue,
-    repeat_customer_revenue * 100.0
-        / total_revenue AS repeat_customer_revenue_percentage
+    ROUND(total_revenue, 2) AS total_revenue,
+    ROUND(repeat_customer_revenue, 2) AS repeat_customer_revenue,
+    ROUND(
+        repeat_customer_revenue * 100.0
+        / total_revenue,
+        2
+    ) AS repeat_customer_revenue_percentage
 FROM category_summary;
 
 
@@ -1382,7 +1400,7 @@ customer_summary AS (
 SELECT
     cs.customer_id,
     cs.name,
-    cs.total_spent
+    ROUND(cs.total_spent, 2) AS total_spent
 FROM customer_summary AS cs
 WHERE
     cs.total_spent > (
@@ -1429,7 +1447,7 @@ SELECT
     product_id,
     product_name,
     COUNT(DISTINCT customer_id) AS unique_customer_count,
-    SUM(customer_product_revenue) AS total_revenue
+    ROUND(SUM(customer_product_revenue), 2) AS total_revenue
 FROM customer_product_sales
 GROUP BY
     product_id,
@@ -1493,7 +1511,7 @@ monthly_category_revenues_ranked AS (
 SELECT
     category_name,
     year_month,
-    monthly_revenue
+    ROUND(monthly_revenue, 2) AS monthly_revenue
 FROM monthly_category_revenues_ranked
 WHERE month_ranking = 1;
 
@@ -1574,10 +1592,10 @@ customer_ranking AS (
 SELECT
     customer_id,
     name,
-    total_spending,
     spending_rank,
     customer_order_count,
     order_rank,
+    ROUND(total_spending, 2) AS total_spending,
     spending_rank + (0.5 * order_rank) AS value_score
 FROM customer_ranking
 ORDER BY value_score;
