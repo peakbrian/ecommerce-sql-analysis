@@ -1,6 +1,9 @@
 .venv/
-*.db
+.vscode/
+__pycache__/
+*.py[cod]
 *.sqlite
 *.sqlite3
-__pycache__/
-refresher.sql
+
+/refresher.sql
+/analysis_results.txt

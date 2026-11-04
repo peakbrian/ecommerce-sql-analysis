@@ -682,11 +682,11 @@ product_summary AS (
 
 SELECT
     categories.category_name,
-    ROUND(SUM(product_summary.product_revenue), 2) AS total_revenue,
-    SUM(product_summary.units_sold) AS units_sold,
+    ROUND(COALESCE(SUM(product_summary.product_revenue),0), 2) AS total_revenue,
+    COALESCE(SUM(product_summary.units_sold), 0) AS units_sold,
     COUNT(product_summary.product_id) AS product_count
 FROM categories
-INNER JOIN product_summary
+LEFT OUTER JOIN product_summary
     ON categories.category_id = product_summary.category_id
 GROUP BY
     categories.category_id,
@@ -945,7 +945,7 @@ SELECT
     ROUND(order_totals.order_total, 2) AS order_total,
     ROUND(LAG(order_totals.order_total) OVER (
         PARTITION BY order_totals.customer_id
-        ORDER BY order_totals.order_id
+        ORDER BY order_totals.order_date, order_totals.order_id
     ), 2) AS previous_order_total
 FROM customers
 INNER JOIN order_totals
@@ -997,7 +997,7 @@ order_history AS (
         customer_order_count,
         LAG(order_total) OVER (
             PARTITION BY customer_id
-            ORDER BY order_id
+            ORDER BY order_date, order_id
         ) AS previous_order_total
     FROM order_totals
 )
@@ -1091,12 +1091,12 @@ WITH order_totals AS (
 
 customer_totals AS (
     SELECT
-        order_totals.customer_id,
+        customers.customer_id,
         customers.name,
-        SUM(order_totals.order_total) AS total_spent
-    FROM order_totals
-    INNER JOIN customers
-        ON order_totals.customer_id = customers.customer_id
+        COALESCE(SUM(order_totals.order_total), 0) AS total_spent
+    FROM customers
+    LEFT OUTER JOIN order_totals
+        ON customers.customer_id = order_totals.customer_id
     GROUP BY
         order_totals.customer_id,
         customers.name
@@ -1109,7 +1109,7 @@ SELECT
     ROUND(
         customer_totals.total_spent
         * 100.0
-        / SUM(customer_totals.total_spent) OVER (),
+        / NULLIF(SUM(customer_totals.total_spent) OVER (), 0),
         2
     ) AS revenue_percentage
 FROM customer_totals
